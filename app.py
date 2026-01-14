@@ -76,16 +76,32 @@ def extract_text_from_pdf(pdf_file):
         return None
 
 
+import time
+
 def get_gemini_response(content, system_instruction=None):
     """Helper to call Gemini API. content can be text or a list [file_ref, prompt]."""
-    try:
-        # Use a standard stable model
-        model = genai.GenerativeModel('gemini-2.0-flash', system_instruction=system_instruction)
-        response = model.generate_content(content)
-        return response.text
-    except Exception as e:
-        st.error(f"Error calling Gemini: {str(e)}")
-        return None
+    # Use a standard stable model with better free tier limits
+    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_instruction)
+    
+    # Retry logic for 429 errors
+    max_retries = 3
+    base_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(content)
+            return response.text
+        except Exception as e:
+            if "429" in str(e):
+                if attempt < max_retries - 1:
+                    time.sleep(base_delay * (2 ** attempt))
+                    continue
+                else:
+                    st.error(f"⏳ Use Limit Exceeded. Please wait a minute and try again. (Quota exhausted)")
+                    return None
+            else:
+                st.error(f"Error calling Gemini: {str(e)}")
+                return None
 
 def generate_roast(input_data, is_scanned=False):
     """Generate brutal resume roast using Gemini."""
